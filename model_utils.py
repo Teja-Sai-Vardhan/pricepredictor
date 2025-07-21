@@ -1,6 +1,6 @@
 import os
-import numpy as np
 import tensorflow as tf
+import numpy as np
 from tensorflow.keras.models import Sequential, load_model
 from tensorflow.keras.layers import LSTM, Dense, Dropout
 from tensorflow.keras.callbacks import EarlyStopping, ModelCheckpoint
@@ -21,22 +21,28 @@ def build_lstm_model(input_shape: tuple) -> Sequential:
     Returns:
         Compiled Keras model
     """
+    # Set memory growth for GPU if available
+    gpus = tf.config.list_physical_devices('GPU')
+    if gpus:
+        try:
+            for gpu in gpus:
+                tf.config.experimental.set_memory_growth(gpu, True)
+        except RuntimeError as e:
+            print(e)
+    
+    # Build the model
     model = Sequential([
-        # First LSTM layer with return_sequences=True to feed to next LSTM layer
-        LSTM(units=50, return_sequences=True, input_shape=input_shape),
-        Dropout(0.2),  # Dropout for regularization
-        
-        # Second LSTM layer
-        LSTM(units=50, return_sequences=False),  # Last LSTM layer
+        LSTM(units=50, return_sequences=True, input_shape=input_shape, kernel_initializer='glorot_uniform'),
         Dropout(0.2),
-        
-        # Dense layers for prediction
-        Dense(25, activation='relu'),
-        Dense(1)  # Output layer (single value prediction)
+        LSTM(units=50, return_sequences=False, kernel_initializer='glorot_uniform'),
+        Dropout(0.2),
+        Dense(25, activation='relu', kernel_initializer='glorot_uniform'),
+        Dense(1, kernel_initializer='glorot_uniform')
     ])
     
-    # Compile the model
-    model.compile(optimizer='adam', loss='mean_squared_error')
+    # Use legacy Adam optimizer for better compatibility
+    optimizer = tf.keras.optimizers.legacy.Adam(learning_rate=0.001)
+    model.compile(optimizer=optimizer, loss='mean_squared_error')
     
     return model
 
@@ -48,7 +54,7 @@ def train_model(
     epochs: int = 100,
     batch_size: int = 32,
     patience: int = 10,
-    model_path: str = 'models/lstm_model.h5'
+    model_path: str = 'models/lstm_model.keras'
 ) -> Tuple[Sequential, dict]:
     """
     Train the LSTM model with early stopping and model checkpointing.
@@ -75,26 +81,33 @@ def train_model(
     # Define callbacks
     callbacks = [
         EarlyStopping(monitor='val_loss' if X_val is not None else 'loss', 
-                     patience=patience, 
-                     restore_best_weights=True),
-        ModelCheckpoint(filepath=model_path, 
-                       save_best_only=True, 
-                       monitor='val_loss' if X_val is not None else 'loss')
+                     patience=patience, restore_best_weights=True, verbose=1),
+        ModelCheckpoint(filepath=model_path, save_best_only=True, 
+                      monitor='val_loss' if X_val is not None else 'loss',
+                      save_weights_only=False, mode='min', verbose=1)
     ]
     
-    # Train the model
-    validation_data = (X_val, y_val) if X_val is not None else None
-    
-    history = model.fit(
-        X_train, y_train,
-        validation_data=validation_data,
-        epochs=epochs,
-        batch_size=batch_size,
-        callbacks=callbacks,
-        verbose=1
-    )
-    
-    return model, history.history
+    # Train the model with error handling
+    try:
+        history = model.fit(
+            X_train, y_train,
+            validation_data=(X_val, y_val) if X_val is not None else None,
+            epochs=epochs,
+            batch_size=batch_size,
+            callbacks=callbacks,
+            verbose=1
+        )
+        
+        # Load the best model weights
+        model = tf.keras.models.load_model(model_path, compile=True)
+        
+        return model, history.history
+        
+    except Exception as e:
+        logging.error(f"Error during model training: {str(e)}")
+        # Try to save the model even if training was interrupted
+        model.save(model_path)
+        raise
 
 def cross_validate(X: np.ndarray, y: np.ndarray, n_splits: int = 5, epochs: int = 50) -> dict:
     """

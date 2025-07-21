@@ -112,14 +112,14 @@ if st.button("Run Analysis"):
             status_text.text("Step 3/4: Training LSTM model...")
             progress_bar.progress(60)
             
-            # Build and train the model
-            model = build_lstm_model((X_train.shape[1], X_train.shape[2]))
-            history = model.fit(
+            # Build and train the model with proper error handling
+            model_path = os.path.join('models', f'{ticker.lower()}_model.keras')
+            model, history = train_model(
                 X_train, y_train,
-                validation_data=(X_test, y_test),
+                X_val=X_test, y_val=y_test,
                 epochs=epochs,
                 batch_size=batch_size,
-                verbose=0
+                model_path=model_path
             )
             
             # Step 4: Make predictions
@@ -158,7 +158,7 @@ if st.button("Run Analysis"):
             st.success("Analysis completed successfully!")
             
             # Create tabs for different visualizations
-            tab1, tab2, tab3, tab4 = st.tabs(["Historical Predictions", "Future Forecast", "Model Performance", "Metrics"])
+            tab1, tab2, tab3 = st.tabs(["Historical Predictions", "Future Forecast", "Model Performance"])
             
             with tab1:
                 st.subheader("Historical Price Predictions")
