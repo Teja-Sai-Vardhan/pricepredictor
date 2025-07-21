@@ -17,32 +17,22 @@ def build_lstm_model(input_shape: tuple) -> Sequential:
     
     Args:
         input_shape: Shape of input data (timesteps, features)
-        
-    Returns:
-        Compiled Keras model
     """
-    # Set memory growth for GPU if available
-    gpus = tf.config.list_physical_devices('GPU')
-    if gpus:
-        try:
-            for gpu in gpus:
-                tf.config.experimental.set_memory_growth(gpu, True)
-        except RuntimeError as e:
-            print(e)
+    # Configure TensorFlow to use CPU only for compatibility
+    tf.config.set_visible_devices([], 'GPU')
     
     # Build the model
     model = Sequential([
-        LSTM(units=50, return_sequences=True, input_shape=input_shape, kernel_initializer='glorot_uniform'),
+        LSTM(units=50, return_sequences=True, input_shape=input_shape),
         Dropout(0.2),
-        LSTM(units=50, return_sequences=False, kernel_initializer='glorot_uniform'),
+        LSTM(units=50, return_sequences=False),
         Dropout(0.2),
-        Dense(25, activation='relu', kernel_initializer='glorot_uniform'),
-        Dense(1, kernel_initializer='glorot_uniform')
+        Dense(25, activation='relu'),
+        Dense(1)
     ])
     
-    # Use legacy Adam optimizer for better compatibility
-    optimizer = tf.keras.optimizers.legacy.Adam(learning_rate=0.001)
-    model.compile(optimizer=optimizer, loss='mean_squared_error')
+    # Compile with standard Adam optimizer
+    model.compile(optimizer='adam', loss='mean_squared_error')
     
     return model
 
